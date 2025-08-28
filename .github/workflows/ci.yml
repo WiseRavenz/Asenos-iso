@@ -39,7 +39,7 @@ jobs:
       - name: Run ISO build script
         run: |
           chmod +x scripts/build.sh
-          ./scripts/build.sh
+          sudo ./scripts/build.sh
 
       - name: Upload built ISO
         uses: actions/upload-artifact@v4
