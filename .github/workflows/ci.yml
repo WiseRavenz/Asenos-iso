@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint:
+    name: Shell script lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update || true
+          sudo apt-get install -y shellcheck || true
+
+      - name: Run ShellCheck on scripts
+        run: |
+          # Lint top-level scripts directory. Adjust glob if you keep scripts elsewhere.
+          shellcheck -x scripts/*.sh
+
+  build_iso:
+    name: Build ISO (Arch container)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare pacman & install dependencies
+        run: |
+          # Ensure keyring is available and pacman can run in the container
+          pacman -Sy --noconfirm archlinux-keyring || true
+          pacman-key --init || true
+          pacman-key --populate archlinux || true
+          # Install packages required to build the ISO. Add/remove as needed.
+          pacman -Syu --noconfirm archiso squashfs-tools xorriso syslinux mtools rsync git || true
+
+      - name: Run ISO build script
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+
+      - name: Upload built ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: asenos-iso
+          # Update this path if your build script emits ISO to a different location
+          path: out/*.iso

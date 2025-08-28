@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# mkarchiso wrapper for Asenos-iso
+# Produces: asenos-YYYY.MM-x86_64.iso
+
+PROGNAME=$(basename "$0")
+ROOT_DIR=$(cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd)
+
+# Defaults
+CONFIG_DIR="$ROOT_DIR/configs"
+WORK_DIR="$ROOT_DIR/work"
+OUT_DIR="$ROOT_DIR/out"
+ARCH="x86_64"
+VERSION_OVERRIDE=""
+CLEAN_BEFORE_BUILD=false
+KEEP_WORK=false
+
+usage() {
+	cat <<EOF
+Usage: $PROGNAME [options]
+
+Options:
+	-h            Show this help
+	-c            Clean work and out directories before building
+	-k            Keep work directory after successful build
+	-v VERSION    Override version string (format: YYYY.MM)
+	-w DIR        Work directory (default: $WORK_DIR)
+	-o DIR        Output directory (default: $OUT_DIR)
+	-C DIR        Configs directory (default: $CONFIG_DIR)
+
+The created ISO will be named: asenos-<version>-${ARCH}.iso
+If -v is not provided the script uses the current year.month (YYYY.MM).
+EOF
+}
+
+while getopts ":hckv:w:o:C:" opt; do
+	case $opt in
+		h) usage; exit 0 ;;
+		c) CLEAN_BEFORE_BUILD=true ;;
+		k) KEEP_WORK=true ;;
+		v) VERSION_OVERRIDE="$OPTARG" ;;
+		w) WORK_DIR="$OPTARG" ;;
+		o) OUT_DIR="$OPTARG" ;;
+		C) CONFIG_DIR="$OPTARG" ;;
+		:) echo "Error: -$OPTARG requires an argument" >&2; usage; exit 2 ;;
+		\?) echo "Unknown option: -$OPTARG" >&2; usage; exit 2 ;;
+	esac
+done
+
+if [[ -z "${VERSION_OVERRIDE}" ]]; then
+	VERSION=$(date +%Y.%m)
+else
+	VERSION="$VERSION_OVERRIDE"
+fi
+
+ISO_NAME="asenos-${VERSION}-${ARCH}.iso"
+
+echo "Config dir: $CONFIG_DIR"
+echo "Work dir:   $WORK_DIR"
+echo "Out dir:    $OUT_DIR"
+echo "Version:    $VERSION"
+echo "ISO name:   $ISO_NAME"
+
+if [[ "$CLEAN_BEFORE_BUILD" == true ]]; then
+	echo "Cleaning work and out directories..."
+	rm -rf "$WORK_DIR" "$OUT_DIR"
+fi
+
+mkdir -p "$WORK_DIR" "$OUT_DIR"
+
+echo "Running mkarchiso..."
+# run mkarchiso using the provided config directory
+scripts/mkarchiso.sh -v -w "$WORK_DIR" -o "$OUT_DIR" "$CONFIG_DIR"
+
+echo "mkarchiso completed. locating produced ISO(s)..."
+
+# find the first ISO in the output dir
+shopt -s nullglob
+isos=("$OUT_DIR"/*.iso)
+shopt -u nullglob
+
+if [[ ${#isos[@]} -eq 0 ]]; then
+	echo "Error: no ISO found in $OUT_DIR" >&2
+	exit 4
+fi
+
+if [[ ${#isos[@]} -gt 1 ]]; then
+	echo "Warning: multiple ISO files found in $OUT_DIR, will pick the newest one." >&2
+fi
+
+# choose newest ISO by modification time
+selected_iso=$(ls -1t "$OUT_DIR"/*.iso | head -n1)
+
+dest="$OUT_DIR/$ISO_NAME"
+
+echo "Renaming $selected_iso -> $dest"
+mv -f -- "$selected_iso" "$dest"
+
+if [[ "$KEEP_WORK" == false ]]; then
+	echo "Removing work directory $WORK_DIR"
+	rm -rf "$WORK_DIR"
+fi
+
+echo "Build complete. ISO available at: $dest"
