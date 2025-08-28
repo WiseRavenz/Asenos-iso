@@ -25,22 +25,16 @@ jobs:
           shellcheck -x scripts/*.sh
 
   build_iso:
-    name: Build ISO (Arch container)
+    name: Build ISO
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare pacman & install dependencies
+      - name: Install dependencies
         run: |
-          # Ensure keyring is available and pacman can run in the container
-          pacman -Sy --noconfirm archlinux-keyring || true
-          pacman-key --init || true
-          pacman-key --populate archlinux || true
-          # Install packages required to build the ISO. Add/remove as needed.
-          pacman -Syu --noconfirm archiso squashfs-tools xorriso syslinux mtools rsync git || true
+          sudo apt-get update || true
+          sudo apt-get install -y archiso squashfs-tools xorriso syslinux mtools rsync git || true
 
       - name: Run ISO build script
         run: |

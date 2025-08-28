@@ -13,7 +13,6 @@ WORK_DIR="$ROOT_DIR/work"
 OUT_DIR="$ROOT_DIR/out"
 ARCH="x86_64"
 VERSION_OVERRIDE=""
-CLEAN_BEFORE_BUILD=false
 KEEP_WORK=false
 
 usage() {
@@ -22,7 +21,6 @@ Usage: $PROGNAME [options]
 
 Options:
 	-h            Show this help
-	-c            Clean work and out directories before building
 	-k            Keep work directory after successful build
 	-v VERSION    Override version string (format: YYYY.MM)
 	-w DIR        Work directory (default: $WORK_DIR)
@@ -34,10 +32,9 @@ If -v is not provided the script uses the current year.month (YYYY.MM).
 EOF
 }
 
-while getopts ":hckv:w:o:C:" opt; do
+while getopts ":hkv:w:o:i:" opt; do
 	case $opt in
 		h) usage; exit 0 ;;
-		c) CLEAN_BEFORE_BUILD=true ;;
 		k) KEEP_WORK=true ;;
 		v) VERSION_OVERRIDE="$OPTARG" ;;
 		w) WORK_DIR="$OPTARG" ;;
@@ -61,11 +58,6 @@ echo "Work dir:   $WORK_DIR"
 echo "Out dir:    $OUT_DIR"
 echo "Version:    $VERSION"
 echo "ISO name:   $ISO_NAME"
-
-if [[ "$CLEAN_BEFORE_BUILD" == true ]]; then
-	echo "Cleaning work and out directories..."
-	rm -rf "$WORK_DIR" "$OUT_DIR"
-fi
 
 mkdir -p "$WORK_DIR" "$OUT_DIR"
 
