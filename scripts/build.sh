@@ -8,7 +8,7 @@ PROGNAME=$(basename "$0")
 ROOT_DIR=$(cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd)
 
 # Defaults
-CONFIG_DIR="$ROOT_DIR/configs"
+ISO_DIR="$ROOT_DIR/iso"
 WORK_DIR="$ROOT_DIR/work"
 OUT_DIR="$ROOT_DIR/out"
 ARCH="x86_64"
@@ -27,7 +27,7 @@ Options:
 	-v VERSION    Override version string (format: YYYY.MM)
 	-w DIR        Work directory (default: $WORK_DIR)
 	-o DIR        Output directory (default: $OUT_DIR)
-	-C DIR        Configs directory (default: $CONFIG_DIR)
+	-i DIR        ISO directory (default: $ISO_DIR)
 
 The created ISO will be named: asenos-<version>-${ARCH}.iso
 If -v is not provided the script uses the current year.month (YYYY.MM).
@@ -42,7 +42,7 @@ while getopts ":hckv:w:o:C:" opt; do
 		v) VERSION_OVERRIDE="$OPTARG" ;;
 		w) WORK_DIR="$OPTARG" ;;
 		o) OUT_DIR="$OPTARG" ;;
-		C) CONFIG_DIR="$OPTARG" ;;
+		i) ISO_DIR="$OPTARG" ;;
 		:) echo "Error: -$OPTARG requires an argument" >&2; usage; exit 2 ;;
 		\?) echo "Unknown option: -$OPTARG" >&2; usage; exit 2 ;;
 	esac
@@ -56,7 +56,7 @@ fi
 
 ISO_NAME="asenos-${VERSION}-${ARCH}.iso"
 
-echo "Config dir: $CONFIG_DIR"
+echo "ISO dir:    $ISO_DIR"
 echo "Work dir:   $WORK_DIR"
 echo "Out dir:    $OUT_DIR"
 echo "Version:    $VERSION"
@@ -70,8 +70,8 @@ fi
 mkdir -p "$WORK_DIR" "$OUT_DIR"
 
 echo "Running mkarchiso..."
-# run mkarchiso using the provided config directory
-scripts/mkarchiso.sh -v -w "$WORK_DIR" -o "$OUT_DIR" "$CONFIG_DIR"
+# run mkarchiso using the provided iso directory
+scripts/mkarchiso.sh -v -w "$WORK_DIR" -o "$OUT_DIR" "$ISO_DIR"
 
 echo "mkarchiso completed. locating produced ISO(s)..."
 
@@ -89,8 +89,9 @@ if [[ ${#isos[@]} -gt 1 ]]; then
 	echo "Warning: multiple ISO files found in $OUT_DIR, will pick the newest one." >&2
 fi
 
-# choose newest ISO by modification time
-selected_iso=$(ls -1t "$OUT_DIR"/*.iso | head -n1)
+# choose newest ISO by modification time (avoid parsing ls output)
+# Use find to print modification time and path, sort by time and extract the path.
+selected_iso=$(find "$OUT_DIR" -maxdepth 1 -type f -name '*.iso' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)
 
 dest="$OUT_DIR/$ISO_NAME"
 

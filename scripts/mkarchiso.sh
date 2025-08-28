@@ -1770,7 +1770,7 @@ _read_profile() {
         cd -- "${profile}"
 
         # Source profile's variables
-        # shellcheck source=configs/releng/profiledef.sh
+        # shellcheck source=iso/profiledef.sh
         . "${profile}/profiledef.sh"
 
         # Resolve paths of files that are expected to reside in the profile's directory
