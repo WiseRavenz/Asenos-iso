@@ -25,22 +25,26 @@ jobs:
           shellcheck -x scripts/*.sh
 
   build_iso:
-    name: Build ISO
+    name: Build ISO (Arch container)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Build ISO in Arch container
         run: |
-          sudo apt-get update || true
-          sudo apt-get install -y archiso squashfs-tools xorriso syslinux mtools rsync git || true
+          docker run --rm --privileged \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            archlinux:latest \
+            bash -c "
+              # Update system and install dependencies
+              pacman -Syu --noconfirm
+              pacman -S --noconfirm archiso squashfs-tools xorriso syslinux mtools rsync git
 
-      - name: Run ISO build script
-        run: |
-          chmod +x scripts/build.sh
-          sudo ./scripts/build.sh
-
+              # Make build script executable and run it
+              chmod +x scripts/build.sh
+              ./scripts/build.sh
       - name: Upload built ISO
         uses: actions/upload-artifact@v4
         with:
