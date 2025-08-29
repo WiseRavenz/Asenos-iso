@@ -21,6 +21,7 @@ file_permissions=(
   ["/root"]="0:0:750"
   ["/root/.automated_script.sh"]="0:0:755"
   ["/root/.gnupg"]="0:0:700"
+  ["/usr/bin/setupwizard-service.sh"]="0:0:755"
   ["/usr/bin/setupwizard.sh"]="0:0:755"
   ["/usr/bin/setup_wifi.sh"]="0:0:755"
   ["/usr/bin/select_keymap.sh"]="0:0:755"

@@ -1,0 +1,18 @@
+
+[Unit]
+Description=Asenos Setup Wizard
+Documentation=man:systemd.service(5)
+After=network-online.target local-fs.target
+Wants=network-online.target
+ConditionPathExists=/usr/bin/setupwizard-service.sh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/setupwizard-service.sh
+TimeoutStartSec=0
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
