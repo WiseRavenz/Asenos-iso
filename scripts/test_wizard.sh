@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Test framework for setup wizard modules
+# shellcheck disable=SC2317  # Functions are called indirectly through aliases and run_test
 
 # Set PWD to project root (one level above this scripts directory)
 PWD="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,6 +46,7 @@ run_test() {
 }
 
 test_common_module() {
+    # shellcheck source=../iso/airootfs/usr/bin/common.sh
     source "$SCRIPT_DIR/common.sh"
     
     # Test that functions exist
@@ -59,6 +61,7 @@ test_common_module() {
 
 test_keymap_module() {
     # Test that the module can be sourced without errors
+    # shellcheck source=../iso/airootfs/usr/bin/select_keymap.sh
     source "$SCRIPT_DIR/select_keymap.sh" || return 1
     
     # Test that the function exists
@@ -71,6 +74,7 @@ test_keymap_module() {
 
 test_wifi_module() {
     # Test that the module can be sourced without errors
+    # shellcheck source=../iso/airootfs/usr/bin/setup_wifi.sh
     source "$SCRIPT_DIR/setup_wifi.sh" || return 1
     
     # Test that the function exists
@@ -83,6 +87,7 @@ test_wifi_module() {
 
 test_partition_module() {
     # Test that the module can be sourced without errors
+    # shellcheck source=../iso/airootfs/usr/bin/partition.sh
     source "$SCRIPT_DIR/partition.sh" || return 1
     
     # Test that functions exist
@@ -97,6 +102,7 @@ test_partition_module() {
 
 test_install_module() {
     # Test that the module can be sourced without errors
+    # shellcheck source=../iso/airootfs/usr/bin/install_system.sh
     source "$SCRIPT_DIR/install_system.sh" || return 1
     
     # Test that functions exist
@@ -111,10 +117,15 @@ test_install_module() {
 
 test_main_wizard() {
     # Test individual functions exist by sourcing modules directly
+    # shellcheck source=../iso/airootfs/usr/bin/common.sh
     source "$SCRIPT_DIR/common.sh" || return 1
+    # shellcheck source=../iso/airootfs/usr/bin/select_keymap.sh
     source "$SCRIPT_DIR/select_keymap.sh" || return 1
+    # shellcheck source=../iso/airootfs/usr/bin/setup_wifi.sh
     source "$SCRIPT_DIR/setup_wifi.sh" || return 1
+    # shellcheck source=../iso/airootfs/usr/bin/partition.sh
     source "$SCRIPT_DIR/partition.sh" || return 1
+    # shellcheck source=../iso/airootfs/usr/bin/install_system.sh
     source "$SCRIPT_DIR/install_system.sh" || return 1
     
     # Now test the main menu function from setupwizard.sh
