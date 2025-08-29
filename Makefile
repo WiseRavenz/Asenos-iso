@@ -16,7 +16,7 @@ RUN_SCRIPT := $(SCRIPTS_DIR)/run_archiso.sh
 VERSION ?= $(ISO_DATE)
 ISO_NAME := asenos-$(VERSION)-$(ARCH).iso
 
-.PHONY: all help install-scripts build test-uefi test-bios clean distclean
+.PHONY: all help install-scripts build test-uefi test-bios test-wizard clean
 
 all: build
 
@@ -25,6 +25,7 @@ help:
 	@printf "  make build [VERSION=YYYY.MM]     Build ISO using $(BUILD_SCRIPT)\n"
 	@printf "  make test-uefi [VERSION=...]     Boot generated ISO in QEMU (UEFI)\n"
 	@printf "  make test-bios [VERSION=...]     Boot generated ISO in QEMU (BIOS)\n"
+	@printf "  make test-wizard                 Run the setup wizard tests\n"
 	@printf "  make install-scripts             Ensure scripts are executable\n"
 	@printf "  make clean                       Remove $(WORK_DIR) and $(OUT_DIR)\n"
 
@@ -34,7 +35,7 @@ install-scripts:
 build: install-scripts
 	@echo "Running build script: $(BUILD_SCRIPT)"
 	# Pass VERSION through to the build script using -v so the script can name the ISO
-	$(BUILD_SCRIPT) -c -k -v $(VERSION)
+	$(BUILD_SCRIPT) -v $(VERSION)
 
 test-uefi: install-scripts
 	@echo "Launching QEMU (UEFI) with $(OUT_DIR)/$(ISO_NAME)"
@@ -43,6 +44,10 @@ test-uefi: install-scripts
 test-bios: install-scripts
 	@echo "Launching QEMU (BIOS) with $(OUT_DIR)/$(ISO_NAME)"
 	$(RUN_SCRIPT) -b -i $(OUT_DIR)/$(ISO_NAME)
+
+test-wizard:
+	@echo "Running wizard tests"
+	$(SCRIPTS_DIR)/test_wizard.sh
 
 clean:
 	rm -rf $(WORK_DIR) $(OUT_DIR)
