@@ -3,5 +3,13 @@ name = "setupwizard"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "setupwizard"
+path = "src/lib.rs"
+
+[[bin]]
+name = "setupwizard"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }

@@ -3,6 +3,7 @@ use clap::Parser;
 mod cli_funcs;
 mod common;
 mod keymap;
+mod partition;
 mod wifi;
 
 #[derive(Parser)]
@@ -26,6 +27,18 @@ struct Cli {
     /// Connect to a Wi-Fi network
     #[arg(long)]
     wifi_connect: Option<String>,
+
+    /// List available disks
+    #[arg(long)]
+    list_disks: bool,
+
+    /// Create partitions on a disk (interactive mode)
+    #[arg(long)]
+    partition_disk: bool,
+
+    /// Create partitions with specified configuration
+    #[arg(long)]
+    partition_config: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -50,6 +63,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // leave password as Option<&str> (None if omitted)
     let passwd = parts.next();
     cli_funcs::wifi_connect(ssid, passwd)?;
+    }
+
+    if cli.list_disks {
+        cli_funcs::list_disks()?;
+    }
+
+    if cli.partition_disk {
+        cli_funcs::partition_disk_interactive()?;
+    }
+
+    if let Some(config_str) = cli.partition_config.as_deref() {
+        cli_funcs::partition_disk_config(config_str)?;
     }
 
     Ok(())
