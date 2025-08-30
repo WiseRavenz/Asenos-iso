@@ -1,4 +1,5 @@
 use crate::keymap;
+use crate::wifi;
 
 pub fn list_keymaps() -> Result<(), String> {
     match keymap::available_keymaps() {
@@ -27,4 +28,12 @@ pub fn keymap_set(map: &str) -> Result<(), String> {
             std::process::exit(1);
         }
     }
+}
+
+pub fn wifi_list() -> Result<(), String> {
+    wifi::list_ssids()
+}
+
+pub fn wifi_connect(ssid: &str, passwd: Option<&str>) -> Result<(), String> {
+    wifi::connect(ssid, passwd)
 }
