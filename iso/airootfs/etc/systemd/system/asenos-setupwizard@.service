@@ -1,0 +1,33 @@
+[Unit]
+Description=Asenos Setup Wizard on %I
+Documentation=man:agetty(8) man:systemd-getty-generator(8)
+After=systemd-user-sessions.service plymouth-quit-wait.service
+After=rc-local.service
+After=local-fs.target
+Before=getty.target
+IgnoreOnIsolate=yes
+ConditionPathExists=/dev/%i
+ConditionPathExists=/usr/bin/setupwizard-service.sh
+ConditionPathExists=/usr/bin/setupwizard
+Conflicts=getty@%i.service
+After=getty@%i.service
+
+[Service]
+ExecStart=-/usr/bin/setupwizard-service.sh /dev/%i
+Type=idle
+Restart=on-failure
+RestartSec=2
+UtmpIdentifier=%I
+TTYPath=/dev/%i
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+KillMode=process
+IgnoreSIGPIPE=no
+SendSIGHUP=yes
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+
+[Install]
+WantedBy=getty.target

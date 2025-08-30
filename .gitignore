@@ -84,3 +84,6 @@ tags
 
 # Git patches (often generated)
 *.patch
+
+# Project Specific
+iso/airootfs/usr/bin/setupwizard
