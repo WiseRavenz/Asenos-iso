@@ -1,142 +1,188 @@
-use crate::keymap;
-use crate::partition;
-use crate::wifi;
+use crate::{keymap, partition, wifi};
+use crate::common::{CommandResult, SetupError};
+use std::io::{self, Write};
 
-pub fn list_keymaps() -> Result<(), String> {
-    match keymap::available_keymaps() {
-        Ok(list) => {
-            println!("Available keymaps:");
-            for km in list {
-                println!(" - {}", km);
-            }
-        }
-        Err(e) => {
-            eprintln!("Failed to discover keymaps: {}", e);
-            std::process::exit(1);
-        }
+pub fn list_keymaps() -> CommandResult<()> {
+    let keymaps = keymap::available_keymaps()?;
+    println!("Available keymaps:");
+    for km in keymaps {
+        println!("  {}", km);
     }
     Ok(())
 }
 
-pub fn keymap_set(map: &str) -> Result<(), String> {
-    match keymap::set_keymap(map) {
-        Ok(()) => {
-            println!("Keymap set to '{}'.", map);
-            Ok(())
-        }
-        Err(e) => {
-            eprintln!("Failed to set keymap: {}", e);
-            std::process::exit(1);
-        }
-    }
+pub fn set_keymap(map: &str) -> CommandResult<()> {
+    keymap::set_keymap(map)?;
+    println!("Keymap set to '{}'", map);
+    Ok(())
 }
 
-pub fn wifi_list() -> Result<(), String> {
-    wifi::list_ssids()
+pub fn list_wifi_networks() -> CommandResult<()> {
+    let networks = wifi::list_networks()?;
+    println!("Available WiFi networks:");
+    println!("{}", networks);
+    Ok(())
 }
 
-pub fn wifi_connect(ssid: &str, passwd: Option<&str>) -> Result<(), String> {
-    wifi::connect(ssid, passwd)
+pub fn connect_wifi(ssid: &str, password: Option<&str>) -> CommandResult<()> {
+    let result = wifi::connect_network(ssid, password)?;
+    println!("WiFi connection result:");
+    println!("{}", result);
+    Ok(())
 }
 
-pub fn list_disks() -> Result<(), String> {
-    match partition::list_disks() {
-        Ok(disks) => {
-            println!("Available disks:");
-            println!("{}", disks);
-            Ok(())
-        }
-        Err(e) => {
-            eprintln!("Failed to list disks: {}", e);
-            std::process::exit(1);
-        }
-    }
+pub fn list_disks() -> CommandResult<()> {
+    let disks = partition::list_disks()?;
+    println!("Available disks:");
+    println!("{}", disks);
+    Ok(())
 }
 
-pub fn partition_disk_interactive() -> Result<(), String> {
-    use std::io::{self, Write};
+pub fn partition_disk_interactive() -> CommandResult<()> {
+    println!("=== Asenos Partition Wizard ===");
     
-    println!("=== Simple Partition Wizard ===");
+    // Show available disks
+    let disks = partition::list_disks()?;
+    println!("Available disks:\n{}", disks);
     
-    // List disks
-    partition::list_disks().map(|disks| println!("Available disks:\n{}", disks))?;
+    // Get user input
+    let disk = prompt_input("Disk (e.g., /dev/sda): ")?;
+    let boot_size_mb = prompt_number("Boot size MB (default 512): ", 512)?;
+    let swap_size_mb = prompt_number("Swap size MB (default 2048): ", 2048)?;
+    let use_gpt = prompt_bool("Use GPT? (y/n, default y): ", true)?;
+    let filesystem = prompt_input_default("Filesystem (ext4/btrfs/xfs, default ext4): ", "ext4")?;
     
-    // Get inputs
-    print!("Disk (e.g., /dev/sda): ");
-    io::stdout().flush().unwrap();
-    let mut disk = String::new();
-    io::stdin().read_line(&mut disk).unwrap();
-    
-    print!("Boot size MB (default 512): ");
-    io::stdout().flush().unwrap();
-    let mut boot = String::new();
-    io::stdin().read_line(&mut boot).unwrap();
-    let boot_size_mb = boot.trim().parse().unwrap_or(512);
-    
-    print!("Swap size MB (default 2048): ");
-    io::stdout().flush().unwrap();
-    let mut swap = String::new();
-    io::stdin().read_line(&mut swap).unwrap();
-    let swap_size_mb = swap.trim().parse().unwrap_or(2048);
-    
-    print!("Use GPT? (y/n, default y): ");
-    io::stdout().flush().unwrap();
-    let mut gpt = String::new();
-    io::stdin().read_line(&mut gpt).unwrap();
-    let use_gpt = gpt.trim().to_lowercase() != "n";
-    
-    print!("Filesystem (ext4/btrfs/xfs, default ext4): ");
-    io::stdout().flush().unwrap();
-    let mut fs = String::new();
-    io::stdin().read_line(&mut fs).unwrap();
-    let filesystem = if fs.trim().is_empty() { "ext4".to_string() } else { fs.trim().to_string() };
-    
-    let config = partition::PartitionConfig {
-        disk: disk.trim().to_string(),
+    let config = partition::PartitionConfig::new(
+        disk.trim().to_string(),
         boot_size_mb,
         swap_size_mb,
         use_gpt,
         filesystem,
-    };
+    );
     
     // Validate and create
-    partition::validate_config(&config)?;
+    config.validate()?;
+    
+    println!("\nCreating partitions on {} with {} table...", 
+        config.disk, if config.use_gpt { "GPT" } else { "MBR" });
+    
     partition::create_partitions(&config)?;
+    println!("Partitions created successfully!");
     
     // Show result
     if let Ok(info) = partition::get_partition_info(&config.disk) {
-        println!("\nResult:\n{}", info);
+        println!("\nPartition layout:\n{}", info);
     }
     
     Ok(())
 }
 
-pub fn partition_disk_config(config_str: &str) -> Result<(), String> {
-    // Parse: "disk:boot_size:swap_size:gpt/msdos:filesystem"
-    let parts: Vec<&str> = config_str.split(':').collect();
+pub fn partition_disk_config(config_str: &str) -> CommandResult<()> {
+    let config = partition::PartitionConfig::from_string(config_str)?;
     
-    if parts.len() != 5 {
-        return Err("Format: disk:boot_size:swap_size:gpt/msdos:filesystem".to_string());
-    }
+    println!("Creating partitions on {} with {} table...", 
+        config.disk, if config.use_gpt { "GPT" } else { "MBR" });
     
-    let config = partition::PartitionConfig {
-        disk: parts[0].to_string(),
-        boot_size_mb: parts[1].parse().map_err(|_| "Invalid boot size")?,
-        swap_size_mb: parts[2].parse().map_err(|_| "Invalid swap size")?,
-        use_gpt: parts[3] == "gpt",
-        filesystem: parts[4].to_string(),
-    };
-    
-    // Validate and create
-    partition::validate_config(&config)?;
-    println!("Creating partitions on {} with {} table...", config.disk, 
-        if config.use_gpt { "GPT" } else { "MBR" });
     partition::create_partitions(&config)?;
+    println!("Partitions created successfully!");
     
     // Show result
     if let Ok(info) = partition::get_partition_info(&config.disk) {
-        println!("\nResult:\n{}", info);
+        println!("\nPartition layout:\n{}", info);
     }
     
     Ok(())
+}
+
+// Helper functions for interactive input
+fn prompt_input(prompt: &str) -> CommandResult<String> {
+    print!("{}", prompt);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let trimmed = input.trim();
+    
+    if trimmed.is_empty() {
+        return Err(SetupError::InvalidInput("Input cannot be empty".to_string()));
+    }
+    
+    Ok(trimmed.to_string())
+}
+
+fn prompt_input_default(prompt: &str, default: &str) -> CommandResult<String> {
+    print!("{}", prompt);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let trimmed = input.trim();
+    
+    if trimmed.is_empty() {
+        Ok(default.to_string())
+    } else {
+        Ok(trimmed.to_string())
+    }
+}
+
+fn prompt_number(prompt: &str, default: u32) -> CommandResult<u32> {
+    print!("{}", prompt);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let trimmed = input.trim();
+    
+    if trimmed.is_empty() {
+        Ok(default)
+    } else {
+        trimmed.parse().map_err(|_| SetupError::InvalidInput("Invalid number".to_string()))
+    }
+}
+
+fn prompt_bool(prompt: &str, default: bool) -> CommandResult<bool> {
+    print!("{}", prompt);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let trimmed = input.trim().to_lowercase();
+    
+    if trimmed.is_empty() {
+        Ok(default)
+    } else {
+        match trimmed.as_str() {
+            "y" | "yes" | "true" | "1" => Ok(true),
+            "n" | "no" | "false" | "0" => Ok(false),
+            _ => Err(SetupError::InvalidInput("Please enter y/n".to_string())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_prompt_bool_parsing() {
+        // Test the boolean parsing logic
+        let test_cases = vec![
+            ("y", true),
+            ("yes", true),
+            ("Y", true),
+            ("YES", true),
+            ("true", true),
+            ("1", true),
+            ("n", false),
+            ("no", false),
+            ("N", false),
+            ("NO", false),
+            ("false", false),
+            ("0", false),
+        ];
+
+        for (input, expected) in test_cases {
+            let result = match input.to_lowercase().as_str() {
+                "y" | "yes" | "true" | "1" => true,
+                "n" | "no" | "false" | "0" => false,
+                _ => panic!("Invalid input for test"),
+            };
+            assert_eq!(result, expected, "Failed for input: {}", input);
+        }
+    }
 }

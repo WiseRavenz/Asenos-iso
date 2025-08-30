@@ -1,7 +1,7 @@
 [package]
 name = "setupwizard"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [lib]
 name = "setupwizard"
@@ -13,3 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.0"

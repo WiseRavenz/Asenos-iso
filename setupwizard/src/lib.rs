@@ -1,7 +1,10 @@
 //! Asenos Setup Wizard Library
 //! 
-//! This library provides functionality for setting up Asenos Linux systems,
-//! including partitioning, network configuration, and system setup.
+//! A system setup wizard for Asenos Linux providing functionality for:
+//! - Keymap configuration
+//! - WiFi network management  
+//! - Disk partitioning
+//! - Basic system configuration
 
 pub mod common;
 pub mod keymap;
@@ -11,3 +14,4 @@ pub mod cli_funcs;
 
 // Re-export commonly used types
 pub use partition::PartitionConfig;
+pub use common::{CommandResult, SetupError};

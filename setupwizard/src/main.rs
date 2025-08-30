@@ -1,68 +1,68 @@
 use clap::Parser;
-
-mod cli_funcs;
-mod common;
-mod keymap;
-mod partition;
-mod wifi;
+use setupwizard::cli_funcs;
+use std::process;
 
 #[derive(Parser)]
 #[command(name = "setupwizard")]
-#[command(version = "1.0")]
-#[command(about = "Asenos Setup Wizard", long_about = None)]
+#[command(version = "0.1.0")]
+#[command(about = "Asenos Setup Wizard - System configuration tool for Asenos Linux")]
 struct Cli {
-    /// Print the available keymaps and exit
+    /// List available keymaps
     #[arg(long)]
     list_keymaps: bool,
 
-    /// Set keymap from the supported list (e.g. "us", "uk", "de")
+    /// Set system keymap (e.g., "us", "uk", "de")
     #[arg(long)]
     keymap: Option<String>,
 
-
-    /// List available Wi-Fi networks
+    /// List available WiFi networks
     #[arg(long)]
     wifi_list: bool,
 
-    /// Connect to a Wi-Fi network
+    /// Connect to WiFi network (format: "ssid" or "ssid:password")
     #[arg(long)]
     wifi_connect: Option<String>,
 
-    /// List available disks
+    /// List available storage devices
     #[arg(long)]
     list_disks: bool,
 
-    /// Create partitions on a disk (interactive mode)
+    /// Launch interactive partition wizard
     #[arg(long)]
     partition_disk: bool,
 
-    /// Create partitions with specified configuration
+    /// Create partitions with configuration string
+    /// Format: disk:boot_size:swap_size:gpt/msdos:filesystem
+    /// Example: /dev/sda:512:2048:gpt:ext4
     #[arg(long)]
     partition_config: Option<String>,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     let cli = Cli::parse();
+    
+    if let Err(e) = run_cli(&cli) {
+        eprintln!("Error: {}", e);
+        process::exit(1);
+    }
+}
 
+fn run_cli(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     if cli.list_keymaps {
         cli_funcs::list_keymaps()?;
     }
 
-    if let Some(map) = cli.keymap.as_deref() {
-        cli_funcs::keymap_set(map)?;
+    if let Some(keymap) = &cli.keymap {
+        cli_funcs::set_keymap(keymap)?;
     }
     
     if cli.wifi_list {
-        cli_funcs::wifi_list()?;
+        cli_funcs::list_wifi_networks()?;
     }
 
-    if let Some(s) = cli.wifi_connect.as_deref() {
-    // Expect input in "ssid:password" format; password is optional
-    let mut parts = s.splitn(2, ':');
-    let ssid = parts.next().unwrap_or("");
-    // leave password as Option<&str> (None if omitted)
-    let passwd = parts.next();
-    cli_funcs::wifi_connect(ssid, passwd)?;
+    if let Some(wifi_config) = &cli.wifi_connect {
+        let (ssid, password) = parse_wifi_config(wifi_config);
+        cli_funcs::connect_wifi(ssid, password)?;
     }
 
     if cli.list_disks {
@@ -73,9 +73,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli_funcs::partition_disk_interactive()?;
     }
 
-    if let Some(config_str) = cli.partition_config.as_deref() {
+    if let Some(config_str) = &cli.partition_config {
         cli_funcs::partition_disk_config(config_str)?;
     }
 
     Ok(())
+}
+
+/// Parse WiFi connection string in format "ssid" or "ssid:password"
+fn parse_wifi_config(config: &str) -> (&str, Option<&str>) {
+    match config.splitn(2, ':').collect::<Vec<&str>>().as_slice() {
+        [ssid] => (ssid, None),
+        [ssid, password] => (ssid, Some(password)),
+        _ => (config, None), // Fallback
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_wifi_config_ssid_only() {
+        let (ssid, password) = parse_wifi_config("MyWiFi");
+        assert_eq!(ssid, "MyWiFi");
+        assert_eq!(password, None);
+    }
+
+    #[test]
+    fn test_parse_wifi_config_with_password() {
+        let (ssid, password) = parse_wifi_config("MyWiFi:mypassword");
+        assert_eq!(ssid, "MyWiFi");
+        assert_eq!(password, Some("mypassword"));
+    }
+
+    #[test]
+    fn test_parse_wifi_config_with_colon_in_password() {
+        let (ssid, password) = parse_wifi_config("MyWiFi:pass:word");
+        assert_eq!(ssid, "MyWiFi");
+        assert_eq!(password, Some("pass:word"));
+    }
 }

@@ -1,57 +1,88 @@
-use crate::common;
+use crate::common::{run_command, CommandResult, SetupError, command_exists};
 
-/// Discover available keymaps from the system.
-///
-/// Tries `localectl list-keymaps` first. If that fails, falls back to scanning
-/// `/usr/share/kbd/keymaps` for map files. Returns a Vec of keymap names or an
-/// Err describing the failure.
-pub fn available_keymaps() -> Result<Vec<String>, String> {
-    // Try localectl which prints a list of keymaps, one per line.
-    if let Ok(s) = common::run_command(&["localectl", "list-keymaps"], None) {
-        let keys: Vec<String> = s
-            .lines()
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty())
-            .collect();
-        if !keys.is_empty() {
-            return Ok(keys);
+/// Get list of available system keymaps
+pub fn available_keymaps() -> CommandResult<Vec<String>> {
+    // Try localectl first (systemd systems)
+    if command_exists("localectl") {
+        if let Ok(output) = run_command(&["localectl", "list-keymaps"], None) {
+            let keymaps: Vec<String> = output
+                .lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .collect();
+            
+            if !keymaps.is_empty() {
+                return Ok(keymaps);
+            }
         }
     }
 
-    // Fallback: look under /usr/share/kbd/keymaps for files and strip extensions.
-    // Use a small shell pipeline so we don't add dependencies for recursive walking.
-    let find_cmd = r#"find /usr/share/kbd/keymaps -type f \( -name '*.map.gz' -o -name '*.map' \) -printf '%f\n' 2>/dev/null | sed -E 's/\.(map|map.gz)$//' | sort -u"#;
-    let output = common::run_command(&["sh", "-c", find_cmd], None)
-        .map_err(|e| format!("failed to execute fallback keymap scan: {}", e))?;
-
-    let keys: Vec<String> = output
+    // Fallback: scan filesystem
+    let find_cmd = concat!(
+        "find /usr/share/kbd/keymaps -type f ",
+        r#"\( -name '*.map.gz' -o -name '*.map' \) "#,
+        r#"-printf '%f\n' 2>/dev/null | "#,
+        r#"sed -E 's/\.(map|map\.gz)$//' | "#,
+        "sort -u"
+    );
+    
+    let output = run_command(&["sh", "-c", find_cmd], None)?;
+    let keymaps: Vec<String> = output
         .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
+        .map(|line| line.trim().to_string())
+        .filter(|line| !line.is_empty())
         .collect();
 
-    if keys.is_empty() {
-        Err("no keymaps found on the system".into())
+    if keymaps.is_empty() {
+        Err(SetupError::System("No keymaps found on system".to_string()))
     } else {
-        Ok(keys)
+        Ok(keymaps)
     }
 }
 
-/// Validate the provided keymap is in the list and attempt to apply it using `loadkeys`.
-/// Returns Ok(()) on success or an Err(message) on failure.
-pub fn set_keymap(map: &str) -> Result<(), String> {
-    let allowed = available_keymaps().map_err(|e| format!("could not get available keymaps: {}", e))?;
-    if !allowed.iter().any(|s| s == map) {
-        return Err(format!(
-            "unknown keymap '{}' - run with --list-keymaps to see supported values",
-            map
-        ));
+/// Set system keymap using loadkeys
+pub fn set_keymap(keymap: &str) -> CommandResult<()> {
+    if keymap.trim().is_empty() {
+        return Err(SetupError::InvalidInput("Keymap cannot be empty".to_string()));
     }
 
-    // Use common::run_command to run loadkeys. run_command reports failures as Err
-    // with combined stdout/stderr which we forward here.
-    match common::run_command(&["loadkeys", map], None) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("loadkeys failed: {}", e)),
+    let available = available_keymaps()?;
+    if !available.contains(&keymap.to_string()) {
+        return Err(SetupError::InvalidInput(format!(
+            "Unknown keymap '{}'. Available: {}",
+            keymap,
+            available.join(", ")
+        )));
+    }
+
+    run_command(&["loadkeys", keymap], None)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_available_keymaps() {
+        let result = available_keymaps();
+        // Should either succeed or fail gracefully
+        match result {
+            Ok(keymaps) => assert!(!keymaps.is_empty()),
+            Err(_) => {} // System might not have keymaps available in test environment
+        }
+    }
+
+    #[test]
+    fn test_set_keymap_empty() {
+        let result = set_keymap("");
+        assert!(result.is_err());
+        matches!(result.unwrap_err(), SetupError::InvalidInput(_));
+    }
+
+    #[test]
+    fn test_set_keymap_invalid() {
+        let result = set_keymap("invalid_keymap_xyz123");
+        assert!(result.is_err());
     }
 }

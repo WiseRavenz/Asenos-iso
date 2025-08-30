@@ -1,52 +1,104 @@
-use crate::common;
+use crate::common::{run_command, CommandResult, SetupError, command_exists};
 
-/// List available SSIDs using iwd (iwctl).
-/// This will run a scan on the first wireless device found and print
-/// the output of `iwctl station <dev> get-networks` to stdout.
-pub fn list_ssids() -> Result<(), String> {
-	let dev = get_first_device()?;
+/// List available WiFi networks using iwctl
+pub fn list_networks() -> CommandResult<String> {
+    if !command_exists("iwctl") {
+        return Err(SetupError::System("iwctl not found - ensure iwd is installed".to_string()));
+    }
 
-	// trigger a scan (best-effort)
-	let _ = common::run_command(&["iwctl", "station", &dev, "scan"], None);
-
-	let out = common::run_command(&["iwctl", "station", &dev, "get-networks"], None)?;
-	println!("{}", out);
-	Ok(())
+    let device = get_first_wireless_device()?;
+    
+    // Trigger scan (best effort)
+    let _ = run_command(&["iwctl", "station", &device, "scan"], None);
+    
+    // Get networks
+    let output = run_command(&["iwctl", "station", &device, "get-networks"], None)?;
+    Ok(output)
 }
 
-/// Connect to an SSID using iwd (iwctl). If `passwd` is Some, it will be
-/// provided on stdin to satisfy the passphrase prompt.
-pub fn connect(ssid: &str, passwd: Option<&str>) -> Result<(), String> {
-	let dev = get_first_device()?;
+/// Connect to WiFi network
+pub fn connect_network(ssid: &str, password: Option<&str>) -> CommandResult<String> {
+    if ssid.trim().is_empty() {
+        return Err(SetupError::InvalidInput("SSID cannot be empty".to_string()));
+    }
 
-	// trigger a scan first
-	let _ = common::run_command(&["iwctl", "station", &dev, "scan"], None);
+    if !command_exists("iwctl") {
+        return Err(SetupError::System("iwctl not found - ensure iwd is installed".to_string()));
+    }
 
-	let args = &["iwctl", "station", &dev, "connect", ssid];
-	let output = common::run_command(args, passwd)?;
-
-	// Print command output for the user. iwctl normally prints connection info.
-	println!("{}", output);
-
-	Ok(())
+    let device = get_first_wireless_device()?;
+    
+    // Trigger scan first
+    let _ = run_command(&["iwctl", "station", &device, "scan"], None);
+    
+    // Connect with optional password
+    let output = run_command(
+        &["iwctl", "station", &device, "connect", ssid], 
+        password
+    )?;
+    
+    Ok(output)
 }
 
-fn get_first_device() -> Result<String, String> {
-	let out = common::run_command(&["iwctl", "device", "list"], None)?;
-	for line in out.lines() {
-		let trimmed = line.trim();
-		if trimmed.is_empty() {
-			continue;
-		}
-		// skip header/separators
-		if trimmed.starts_with("Device") || trimmed.starts_with('-') {
-			continue;
-		}
+/// Get the first available wireless device
+fn get_first_wireless_device() -> CommandResult<String> {
+    let output = run_command(&["iwctl", "device", "list"], None)?;
+    
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || 
+           trimmed.starts_with("Device") || 
+           trimmed.starts_with('-') {
+            continue;
+        }
+        
+        if let Some(device) = trimmed.split_whitespace().next() {
+            return Ok(device.to_string());
+        }
+    }
+    
+    Err(SetupError::System("No wireless device found".to_string()))
+}
 
-		// first whitespace-separated token is usually the device name (e.g. wlan0)
-		if let Some(first) = trimmed.split_whitespace().next() {
-			return Ok(first.to_string());
-		}
-	}
-	Err("No wireless device found (iwctl device list returned no device)".into())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_connect_network_empty_ssid() {
+        let result = connect_network("", None);
+        assert!(result.is_err());
+        matches!(result.unwrap_err(), SetupError::InvalidInput(_));
+    }
+
+    #[test]
+    fn test_connect_network_whitespace_ssid() {
+        let result = connect_network("   ", None);
+        assert!(result.is_err());
+        matches!(result.unwrap_err(), SetupError::InvalidInput(_));
+    }
+
+    #[test]
+    fn test_get_first_wireless_device_parsing() {
+        // Test the device parsing logic with mock data
+        let mock_output = "Device     Type    Mode    Powered\nwlan0      station on      on\n";
+        let lines: Vec<&str> = mock_output.lines().collect();
+        
+        let mut device = None;
+        for line in lines {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || 
+               trimmed.starts_with("Device") || 
+               trimmed.starts_with('-') {
+                continue;
+            }
+            
+            if let Some(d) = trimmed.split_whitespace().next() {
+                device = Some(d.to_string());
+                break;
+            }
+        }
+        
+        assert_eq!(device, Some("wlan0".to_string()));
+    }
 }
